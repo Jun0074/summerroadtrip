@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>18-Day Northwest Road Trip</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css"/>
+
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,400&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+
+/* ── RESET ── */
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; }
+body { font-family:'DM Sans',sans-serif; background:#fdf8f2; color:#1a1208; }
+
+/* ── HERO ── */
+.hero {
+  background:#1a1208;
+  padding:48px 40px 44px;
+  position:relative; overflow:hidden;
+}
+.hero::before {
+  content:''; position:absolute; inset:0;
+  background:
+    radial-gradient(ellipse 70% 60% at 15% 70%, rgba(196,85,26,.22) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 70% at 85% 25%, rgba(58,107,138,.15) 0%, transparent 60%);
+  pointer-events:none;
+}
+.hero-inner { position:relative; max-width:1400px; margin:0 auto; }
+.eyebrow { font-family:'DM Mono',monospace; font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:#d4920a; margin-bottom:12px; }
+.hero h1 { font-family:'Playfair Display',serif; font-size:clamp(40px,6.5vw,84px); font-weight:900; line-height:.92; color:#f5ede0; margin-bottom:24px; }
+.hero h1 em { font-style:italic; color:#c4551a; }
+.stats { display:flex; gap:28px; flex-wrap:wrap; }
+.stat-n { font-family:'Playfair Display',serif; font-size:26px; font-weight:700; color:#f5ede0; display:block; }
+.stat-l { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.15em; text-transform:uppercase; color:#8c7b6b; }
+
+/* ── ROUTE BAR ── */
+.rbar {
+  background:#c4551a; padding:9px 40px;
+  display:flex; gap:5px; align-items:center;
+  overflow-x:auto; white-space:nowrap; scrollbar-width:none;
+}
+.rbar::-webkit-scrollbar { display:none; }
+.rs { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:rgba(253,248,242,.9); }
+.ra { color:rgba(253,248,242,.4); font-size:10px; }
+
+/* ── TIPS ── */
+.tips { background:#2d5a3d; padding:12px 40px; display:flex; gap:28px; flex-wrap:wrap; }
+.tip { display:flex; gap:7px; align-items:flex-start; flex:1; min-width:160px; }
+.tip p { font-size:12px; color:rgba(245,237,224,.85); line-height:1.5; }
+.tip p b { display:block; color:#f5ede0; font-size:10px; letter-spacing:.07em; text-transform:uppercase; font-family:'DM Mono',monospace; margin-bottom:1px; }
+
+/* ── THE MAIN APP SPLIT ── */
+/* 
+  KEY FIX: We use a fixed-height wrapper instead of relying on 
+  the viewport. Leaflet needs a real pixel height on #map.
+*/
+.app {
+  display:flex;
+  height:620px;           /* fixed height — map will always render */
+  border-bottom:1px solid #e8dfd4;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width:380px; min-width:280px; flex-shrink:0;
+  display:flex; flex-direction:column;
+  border-right:1px solid #e8dfd4;
+  overflow:hidden;
+}
+.sbhdr {
+  padding:14px 18px; border-bottom:1px solid #e8dfd4;
+  flex-shrink:0; background:#fdf8f2;
+}
+.sbhdr-t { font-family:'Playfair Display',serif; font-size:15px; font-weight:700; }
+.sbhdr-s { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:#8c7b6b; margin-top:2px; }
+.sblist { overflow-y:auto; flex:1; }
+.sblist::-webkit-scrollbar { width:3px; }
+.sblist::-webkit-scrollbar-thumb { background:#c4b5a5; border-radius:2px; }
+
+/* ── DAY ITEMS ── */
+.ditem {
+  padding:12px 18px; border-bottom:1px solid #e8dfd4;
+  cursor:pointer; transition:background .15s;
+}
+.ditem:hover { background:rgba(196,85,26,.04); }
+.ditem.on { background:#1a1208; }
+
+.dtop { display:flex; gap:10px; align-items:flex-start; }
+.dnum {
+  font-family:'Playfair Display',serif; font-size:24px; font-weight:900;
+  line-height:1; color:#e8dfd4; min-width:38px; flex-shrink:0;
+}
+.ditem.on .dnum { color:#c4551a; }
+.dright { flex:1; min-width:0; }
+.dtitle { font-size:13px; font-weight:500; color:#1a1208; line-height:1.3; }
+.ditem.on .dtitle { color:#f5ede0; }
+.dmeta { display:flex; align-items:center; gap:7px; margin-top:4px; flex-wrap:wrap; }
+
+.badge {
+  font-family:'DM Mono',monospace; font-size:9px; letter-spacing:.09em;
+  text-transform:uppercase; padding:2px 7px; border-radius:20px; flex-shrink:0;
+}
+.b-drive   { background:#e8dfd4; color:#8c7b6b; }
+.b-nature  { background:rgba(45,90,61,.12); color:#2d5a3d; }
+.b-coast   { background:rgba(58,107,138,.12); color:#3a6b8a; }
+.b-city    { background:rgba(212,146,10,.12); color:#d4920a; }
+.b-highlight { background:rgba(196,85,26,.12); color:#c4551a; }
+.ditem.on .badge { background:rgba(245,237,224,.1); color:#8c7b6b; }
+
+.dhr { font-family:'DM Mono',monospace; font-size:10px; color:#8c7b6b; }
+
+.dstops { margin-top:8px; display:flex; flex-direction:column; gap:4px; }
+.dstop { display:flex; gap:7px; }
+.dot { width:6px; height:6px; border-radius:50%; background:#c4551a; flex-shrink:0; margin-top:5px; }
+.stime { font-family:'DM Mono',monospace; font-size:9px; color:#8c7b6b; }
+.sname { font-size:12px; font-weight:500; color:#1a1208; }
+.ditem.on .sname { color:#f5ede0; }
+.snote { font-size:11px; color:#8c7b6b; line-height:1.4; margin-top:1px; }
+.ditem.on .snote { color:#5a5048; }
+
+.dnote {
+  margin-top:8px; padding:7px 9px;
+  background:#f0e9e0; border-left:3px solid #c4551a;
+  font-size:11px; color:#1a1208; line-height:1.5;
+}
+.ditem.on .dnote { background:rgba(245,237,224,.07); color:rgba(245,237,224,.75); }
+
+/* ── MAP PANEL ── */
+.mpanel { flex:1; position:relative; min-width:0; }
+
+/* THE CRITICAL FIX: map must be 100% of its parent's height */
+#map {
+  position:absolute;
+  top:0; left:0; right:0; bottom:0;   /* fill the panel completely */
+}
+
+/* ── MAP OVERLAY ── */
+.moverlay {
+  position:absolute; top:12px; right:12px; z-index:1000;
+  background:rgba(26,18,8,.9); color:#f5ede0;
+  padding:12px 14px; border-radius:8px; max-width:250px;
+  backdrop-filter:blur(6px);
+  border:1px solid rgba(245,237,224,.1);
+  pointer-events:none;
+}
+.mo-day { font-family:'DM Mono',monospace; font-size:9px; letter-spacing:.15em; text-transform:uppercase; color:#d4920a; margin-bottom:3px; }
+.mo-title { font-family:'Playfair Display',serif; font-size:13px; font-weight:700; line-height:1.3; margin-bottom:3px; }
+.mo-drive { font-family:'DM Mono',monospace; font-size:10px; color:#8c7b6b; }
+
+/* ── BOOKING ── */
+.booking { background:#1a1208; padding:48px 40px; }
+.booking-inner { max-width:960px; margin:0 auto; }
+.booking h2 { font-family:'Playfair Display',serif; font-size:26px; font-weight:700; color:#f5ede0; margin-bottom:5px; }
+.booking-sub { font-size:13px; color:#8c7b6b; margin-bottom:24px; }
+table { width:100%; border-collapse:collapse; }
+th {
+  font-family:'DM Mono',monospace; font-size:9px; letter-spacing:.12em; text-transform:uppercase;
+  color:#8c7b6b; text-align:left; padding:7px 12px; border-bottom:1px solid rgba(245,237,224,.1);
+}
+td { font-size:12px; padding:9px 12px; border-bottom:1px solid rgba(245,237,224,.06); color:rgba(245,237,224,.8); vertical-align:top; }
+td:first-child { font-family:'DM Mono',monospace; font-size:10px; color:#8c7b6b; white-space:nowrap; }
+.urg { color:#c4551a !important; font-weight:500; }
+.tnote { color:#6b5f52 !important; font-size:11px; font-style:italic; }
+
+/* ── FOOTER ── */
+footer {
+  background:#c4551a; padding:22px 40px;
+  display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;
+}
+.ft { font-family:'Playfair Display',serif; font-size:15px; font-weight:700; color:#f5ede0; }
+.fs { font-family:'DM Mono',monospace; font-size:10px; color:rgba(253,248,242,.65); margin-top:2px; }
+.fstats { display:flex; gap:18px; flex-wrap:wrap; }
+.fstat-n { font-family:'Playfair Display',serif; font-size:20px; font-weight:700; color:#f5ede0; }
+.fstat-l { font-family:'DM Mono',monospace; font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:rgba(253,248,242,.6); }
+
+/* ── MARKER ── */
+.cm {
+  width:26px; height:26px; border-radius:50%;
+  border:2px solid white; display:flex; align-items:center; justify-content:center;
+  font-family:'DM Mono',monospace; font-size:10px; font-weight:500; color:white;
+  box-shadow:0 2px 8px rgba(0,0,0,.45);
+}
+
+/* ── MOBILE ── */
+@media(max-width:760px){
+  .app { flex-direction:column; height:auto; }
+  .sidebar { width:100%; max-height:360px; }
+  #map { position:relative; height:380px; }
+  .mpanel { height:380px; }
+  .hero { padding:36px 18px 32px; }
+  .rbar,.tips,.booking,footer { padding-left:18px; padding-right:18px; }
+  .tips { gap:16px; }
+}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Iowa ➔ Pacific Northwest ➔ Rocky Mountains ➔ Iowa</p>
+    <h1>The <em>Great</em><br>Northwest Loop</h1>
+    <div class="stats">
+      <div><span class="stat-n">18</span><span class="stat-l">Days on road</span></div>
+      <div><span class="stat-n">~5,000</span><span class="stat-l">Miles driven</span></div>
+      <div><span class="stat-n">9</span><span class="stat-l">National Parks</span></div>
+      <div><span class="stat-n">≤10h</span><span class="stat-l">Max per day</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ROUTE BAR -->
+<div class="rbar">
+  <span class="rs">Ames IA</span><span class="ra">➔</span><span class="rs">Badlands SD</span><span class="ra">➔</span>
+  <span class="rs">Mt Rushmore</span><span class="ra">➔</span><span class="rs">Custer SP</span><span class="ra">➔</span>
+  <span class="rs">Billings MT</span><span class="ra">➔</span><span class="rs">Glacier NP</span><span class="ra">➔</span>
+  <span class="rs">North Cascades</span><span class="ra">➔</span><span class="rs">Olympic NP</span><span class="ra">➔</span>
+  <span class="rs">Seattle</span><span class="ra">➔</span><span class="rs">Portland</span><span class="ra">➔</span>
+  <span class="rs">Oregon Coast</span><span class="ra">➔</span><span class="rs">Redwoods NP</span><span class="ra">➔</span>
+  <span class="rs">Crater Lake NP</span><span class="ra">➔</span><span class="rs">Boise ID</span><span class="ra">➔</span>
+  <span class="rs">Salt Lake City</span><span class="ra">➔</span><span class="rs">Bonneville</span><span class="ra">➔</span>
+  <span class="rs">Rocky Mtn NP</span><span class="ra">➔</span><span class="rs">Ames IA</span>
+</div>
+
+<!-- TIPS -->
+<div class="tips">
+  <div class="tip"><span>⚡</span><p><b>Book Now</b>Glacier timed entry, Lake Crescent Lodge, Tall Trees + Fern Canyon permits sell out months ahead.</p></div>
+  <div class="tip"><span>⛽</span><p><b>Fuel Warning</b>Fill up in Wenatchee WA before Hwy 20 — no gas for a long stretch into North Cascades.</p></div>
+  <div class="tip"><span>❄️</span><p><b>Seasonal Roads</b>Hwy 20 through North Cascades closes Nov–April. Check WSDOT before your trip.</p></div>
+</div>
+
+<!-- APP -->
+<div class="app">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sbhdr">
+      <div class="sbhdr-t">18-Day Itinerary</div>
+      <div class="sbhdr-s">Click any day ➔ map updates</div>
+    </div>
+    <div class="sblist" id="sblist"></div>
+  </div>
+
+  <!-- MAP -->
+  <div class="mpanel">
+    <div id="map"></div>
+    <div class="moverlay">
+      <div class="mo-day" id="mo-day">Overview</div>
+      <div class="mo-title" id="mo-title">All 18 Days — click a day</div>
+      <div class="mo-drive" id="mo-drive">~5,000 mi · 9 National Parks</div>
+    </div>
+  </div>
+</div>
+
+<!-- BOOKING -->
+<div class="booking">
+  <div class="booking-inner">
+    <h2>Advance Booking Checklist</h2>
+    <p class="booking-sub">These sell out fast — book as soon as your dates are confirmed</p>
+    <table>
+      <thead><tr><th>Day</th><th>What to Book</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Day 3–4</td><td class="urg">Glacier Going-to-the-Sun Road timed entry</td><td class="tnote">Recreation.gov — opens months in advance, sells within hours</td></tr>
+        <tr><td>Day 7</td><td class="urg">Lake Crescent Lodge, Olympic NP</td><td class="tnote">Books 6+ months ahead in summer</td></tr>
+        <tr><td>Day 11</td><td class="urg">Tall Trees Grove permit, Redwood NP</td><td class="tnote">nps.gov — timed entry, very limited slots per day</td></tr>
+        <tr><td>Day 11</td><td class="urg">Fern Canyon day-use permit</td><td class="tnote">Free but required — recreation.gov. Book same time as Tall Trees.</td></tr>
+        <tr><td>Day 5</td><td>Marblemount / Newhalem lodging</td><td class="tnote">Very few options inside the North Cascades corridor</td></tr>
+        <tr><td>Day 1</td><td>Custer State Park lodge or cabin</td><td class="tnote">campsd.com — popular in summer</td></tr>
+        <tr><td>Day 12–13</td><td>Crater Lake Lodge or Mazama Village</td><td class="tnote">Crater Lake Lodge fills fast — book well ahead</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div>
+    <div class="ft">The Great Northwest Loop</div>
+    <div class="fs">Ames, Iowa — Departing &amp; Returning · No border crossings</div>
+  </div>
+  <div class="fstats">
+    <div><div class="fstat-n">18</div><div class="fstat-l">Days</div></div>
+    <div><div class="fstat-n">9</div><div class="fstat-l">Nat'l Parks</div></div>
+    <div><div class="fstat-n">≤10h</div><div class="fstat-l">Max Drive/Day</div></div>
+    
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
+<script>if(typeof L==='undefined'){document.write('<scr'+'ipt src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/scr'+'ipt>');}</script>
+<script>if(typeof L==='undefined'){document.write('<scr'+'ipt src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"><\/scr'+'ipt>');}</script>
+</body>
+
+<script>
+var DAYS = [
+  { num:1, title:"Ames ➔ Black Hills, South Dakota", badge:"highlight", bl:"Road Trip Start!", drive:"~9 hrs · I-90 west", color:"#c4551a",
+    note:"🦬 Bison walk right up to your car on Wildlife Loop Road. Stay for Rushmore's evening lighting ceremony.",
+    stops:[{t:"6:00 AM",n:"Ames, Iowa — Depart",d:"Early start west on I-90",lat:42.0308,lng:-93.6319,type:"home"},
+           {t:"2:30 PM",n:"Badlands National Park",d:"30-mile Loop Road — otherworldly formations, free-roaming bison",lat:43.8554,lng:-102.3397,type:"stop"},
+           {t:"5:00 PM",n:"Mount Rushmore",d:"Evening lighting ceremony at dusk. $10 parking.",lat:43.8803,lng:-103.4538,type:"stop"},
+           {t:"7:30 PM",n:"Custer State Park — Overnight",d:"Book lodge or cabin in advance",lat:43.7325,lng:-103.4133,type:"overnight"}]},
+
+  { num:2, title:"Black Hills ➔ Billings, Montana", badge:"drive", bl:"Drive Day", drive:"~7.5 hrs · I-90 north", color:"#8c7b6b",
+    note:"Splits the brutal Custer➔Glacier leg safely in half. Little Bighorn is a moving 30-min stop right off I-90.",
+    stops:[{t:"8:00 AM",n:"Needles Highway, Custer SP",d:"Dramatic granite spire formations",lat:43.7325,lng:-103.4133,type:"stop"},
+           {t:"12:30 PM",n:"Little Bighorn Battlefield",d:"30-min stop off I-90 — significant historic site",lat:45.5658,lng:-107.4274,type:"stop"},
+           {t:"4:30 PM",n:"Billings, Montana — Overnight",d:"Good hotels and food options",lat:45.7833,lng:-108.5007,type:"overnight"}]},
+
+  { num:3, title:"Billings ➔ Glacier National Park", badge:"drive", bl:"Drive Day", drive:"~7.5 hrs · I-90 then Hwy 89", color:"#8c7b6b",
+    note:"Book Going-to-the-Sun Road timed entry on recreation.gov well in advance — sells out months ahead.",
+    stops:[{t:"7:00 AM",n:"Billings — Depart Early",d:"North through Montana ranch country",lat:45.7833,lng:-108.5007,type:"stop"},
+           {t:"2:30 PM",n:"Glacier National Park — Arrive",d:"Settle in. Timed entry required for Going-to-the-Sun Road.",lat:48.7561,lng:-113.7797,type:"overnight"}]},
+
+  { num:4, title:"Glacier National Park — Full Day", badge:"nature", bl:"National Park", drive:"No long driving", color:"#2d5a3d",
+    note:"🏔️ Going-to-the-Sun Road — often called the most scenic drive in America. Grinnell Glacier hike is unmissable.",
+    stops:[{t:"7:00 AM",n:"Going-to-the-Sun Road",d:"Full 50-mile drive. Logan Pass summit — mountain goats everywhere.",lat:48.6961,lng:-113.718,type:"stop"},
+           {t:"11:00 AM",n:"Grinnell Glacier Trail",d:"Best hike in the park. 11 miles round trip. Active glacier above.",lat:48.7596,lng:-113.665,type:"overnight"}]},
+
+  { num:5, title:"Glacier ➔ North Cascades NP", badge:"drive", bl:"Drive Day", drive:"~5.5 hrs · Hwy 2 ➔ Hwy 20", color:"#8c7b6b",
+    note:"⛽ CRITICAL: Fill up in Wenatchee before Hwy 20 — no gas stations for miles. ⚠️ Hwy 20 closes Nov–April.",
+    stops:[{t:"8:00 AM",n:"Glacier NP — Depart",d:"Scenic Hwy 2 west through Okanagan Highlands",lat:48.7561,lng:-113.7797,type:"stop"},
+           {t:"11:30 AM",n:"⛽ Wenatchee, WA — Fuel & Lunch",d:"CRITICAL: last fuel before North Cascades",lat:47.4235,lng:-120.3103,type:"fuel"},
+           {t:"2:30 PM",n:"Diablo Lake, North Cascades NP",d:"Jaw-dropping turquoise glacier lake. Walk Thunder Knob trail.",lat:48.7122,lng:-121.1133,type:"stop"},
+           {t:"5:30 PM",n:"Marblemount / Newhalem — Overnight",d:"Very limited rooms — book well ahead",lat:48.5197,lng:-121.4436,type:"overnight"}]},
+
+  { num:6, title:"North Cascades ➔ Olympic Peninsula", badge:"coast", bl:"Coast & Mountains", drive:"~5.5 hrs total", color:"#3a6b8a",
+    note:"Ruby Beach at sunset has sea stacks, driftwood the size of buildings, bald eagles — one of the most dramatic coastal scenes in the US.",
+    stops:[{t:"8:00 AM",n:"Washington Pass Overlook",d:"Dramatic granite spires — best morning light",lat:48.5167,lng:-120.6592,type:"stop"},
+           {t:"1:00 PM",n:"Hurricane Ridge, Olympic NP",d:"5,200 ft · 360° mountain views · mountain goats on the trail",lat:47.9331,lng:-123.4096,type:"stop"},
+           {t:"5:30 PM",n:"Ruby Beach — Sunset & Overnight",d:"Wild sea stacks. Overnight Kalaloch.",lat:47.7099,lng:-124.4152,type:"overnight"}]},
+
+  { num:7, title:"Hoh Rain Forest + Lake Crescent", badge:"nature", bl:"Rainforest & Lakes", drive:"~1.5 hrs total", color:"#2d5a3d",
+    note:"🌿 The very tall trees you came for. Walk past Hall of Mosses into the Hoh River Trail — ancient Sitka spruce over 300 ft tall.",
+    stops:[{t:"9:00 AM",n:"Hoh Rain Forest",d:"Hall of Mosses + Hoh River Trail extension. Sitka spruce 300+ ft.",lat:47.8609,lng:-123.9348,type:"stop"},
+           {t:"3:30 PM",n:"Lake Crescent — Overnight",d:"Crystal-clear turquoise glacier lake. Book months ahead!",lat:48.0582,lng:-123.8132,type:"overnight"}]},
+
+  { num:8, title:"Olympic Peninsula ➔ Seattle ➔ Portland", badge:"city", bl:"City Day", drive:"~4.5 hrs total", color:"#d4920a",
+    note:"Portland has one of the best food scenes in the US — great dinner after a long week on the road.",
+    stops:[{t:"10:30 AM",n:"Seattle, Washington",d:"Pike Place Market, waterfront, Space Needle",lat:47.6062,lng:-122.3321,type:"stop"},
+           {t:"4:00 PM",n:"Portland, Oregon — Overnight",d:"Great food city. Base for coast tomorrow.",lat:45.5051,lng:-122.675,type:"overnight"}]},
+
+  { num:9, title:"Columbia Gorge ➔ Oregon Coast North", badge:"coast", bl:"Coast Day", drive:"~4 hrs total", color:"#3a6b8a",
+    note:"Thor's Well at high tide erupts like a natural blowhole — time your visit around high tide for maximum drama.",
+    stops:[{t:"8:00 AM",n:"Multnomah Falls",d:"Oregon's iconic 620-ft waterfall. Go early.",lat:45.5762,lng:-122.1158,type:"stop"},
+           {t:"1:00 PM",n:"Cannon Beach, Oregon",d:"Haystack Rock sea stack. Walk at low tide.",lat:45.8918,lng:-123.9615,type:"stop"},
+           {t:"5:30 PM",n:"Cape Perpetua / Thor's Well — Overnight",d:"Overnight Yachats or Florence.",lat:44.2806,lng:-124.1089,type:"overnight"}]},
+
+  { num:10, title:"Oregon Dunes ➔ Wild South Coast", badge:"coast", bl:"Coast Day", drive:"~3.5 hrs total", color:"#3a6b8a",
+    note:"Samuel Boardman Corridor has the most dramatic sea stacks on the entire US coast — pull off at every overlook.",
+    stops:[{t:"9:00 AM",n:"Oregon Dunes NRA",d:"500-ft sand dunes rolling straight into the Pacific",lat:43.7035,lng:-124.106,type:"stop"},
+           {t:"1:30 PM",n:"Samuel H. Boardman Corridor",d:"Arch Rock, Natural Bridges, dramatic sea stacks",lat:42.122,lng:-124.3628,type:"stop"},
+           {t:"4:00 PM",n:"Gold Beach, Oregon — Overnight",d:"Wild southern Oregon coast",lat:42.4073,lng:-124.4218,type:"overnight"}]},
+
+  { num:11, title:"Redwood NP — Tall Trees + Fern Canyon", badge:"nature", bl:"National Park", drive:"~2 hrs total", color:"#2d5a3d",
+    note:"🌲 Reserve both permits on recreation.gov at the same time. Fern Canyon is where Jurassic Park was filmed.",
+    stops:[{t:"9:30 AM",n:"Tall Trees Grove, Redwood NP",d:"Tallest trees on Earth — 350+ ft. Permit required.",lat:41.2087,lng:-124.0035,type:"stop"},
+           {t:"1:30 PM",n:"Fern Canyon, Prairie Creek Redwoods",d:"50-ft walls of solid ferns. Jurassic Park location.",lat:41.4016,lng:-124.0416,type:"stop"},
+           {t:"4:00 PM",n:"Crescent City, CA — Overnight",d:"",lat:41.7558,lng:-124.2026,type:"overnight"}]},
+
+  { num:12, title:"Redwoods ➔ Crater Lake", badge:"drive", bl:"Drive Day", drive:"~5 hrs · Hwy 199 ➔ Hwy 97", color:"#8c7b6b",
+    note:"Arrive for golden hour at Rim Village — the blue water at sunset is genuinely staggering.",
+    stops:[{t:"9:00 AM",n:"Crescent City — Depart",d:"Inland on Hwy 199 then Hwy 97 north",lat:41.7558,lng:-124.2026,type:"stop"},
+           {t:"4:00 PM",n:"Crater Lake NP — Arrive & Overnight",d:"Golden hour at Rim Village.",lat:42.9295,lng:-122.1279,type:"overnight"}]},
+
+  { num:13, title:"Crater Lake — Full Rim Day", badge:"nature", bl:"National Park", drive:"No long driving", color:"#3a6b8a",
+    note:"💙 Deepest, clearest lake in the US. Filled only by rain and snow — visibility to 100+ feet. The blue does not look real.",
+    stops:[{t:"7:00 AM",n:"Crater Lake Full Rim Drive",d:"33-mile Rim Drive + Cleetwood Cove Trail to touch the water.",lat:42.9295,lng:-122.1279,type:"overnight"}]},
+
+  { num:14, title:"Crater Lake ➔ Boise, Idaho", badge:"drive", bl:"Drive Day", drive:"~8.5 hrs · Hwy 138 ➔ I-84", color:"#8c7b6b",
+    note:"Shoshone Falls is taller than Niagara Falls — an easy 20-min detour right off I-84. Don't skip it.",
+    stops:[{t:"8:00 AM",n:"Crater Lake — Depart",d:"East on Hwy 138 then I-84",lat:42.9295,lng:-122.1279,type:"stop"},
+           {t:"4:00 PM",n:"Shoshone Falls, Twin Falls ID",d:"Taller than Niagara. Easy 20-min detour off I-84.",lat:42.5937,lng:-114.401,type:"stop"},
+           {t:"6:30 PM",n:"Boise, Idaho — Overnight",d:"Splits the long return leg safely in two.",lat:43.615,lng:-116.2023,type:"overnight"}]},
+
+  { num:15, title:"Boise ➔ Salt Lake City", badge:"city", bl:"City Overnight", drive:"~5 hrs · I-84 ➔ I-15 south", color:"#d4920a",
+    note:"Afternoon free in SLC — Temple Square, great food scene, Liberty Park. Good rest before the final mountain push.",
+    stops:[{t:"7:00 AM",n:"Boise — Depart",d:"East on I-84 then I-15 south into Utah",lat:43.615,lng:-116.2023,type:"stop"},
+           {t:"12:00 PM",n:"Salt Lake City — Arrive & Overnight",d:"Afternoon free to explore SLC.",lat:40.7608,lng:-111.891,type:"overnight"}]},
+
+  { num:16, title:"SLC ➔ Bonneville ➔ Rocky Mountain NP", badge:"nature", bl:"National Park", drive:"~6.5 hrs total", color:"#2d5a3d",
+    note:"Bonneville is a quick west detour on I-80 before heading east — blinding white alien landscape, looks like another planet.",
+    stops:[{t:"8:00 AM",n:"Salt Lake City — Depart",d:"West briefly on I-80 for Bonneville, then east",lat:40.7608,lng:-111.891,type:"stop"},
+           {t:"9:00 AM",n:"Bonneville Salt Flats",d:"Blinding white alien landscape. 30-min stop.",lat:40.7787,lng:-113.8352,type:"stop"},
+           {t:"6:30 PM",n:"Rocky Mountain NP — Estes Park",d:"Elk herds wander the town at dusk.",lat:40.3428,lng:-105.6836,type:"overnight"}]},
+
+  { num:17, title:"Rocky Mountain NP — Full Day", badge:"nature", bl:"National Park", drive:"No long driving", color:"#2d5a3d",
+    note:"🦌 Elk most active at dawn and dusk. Trail Ridge Road crests above treeline at 12,183 ft — feels more Alaska than Colorado.",
+    stops:[{t:"7:00 AM",n:"Trail Ridge Road",d:"Highest continuous paved road in the US — 12,183 ft",lat:40.3928,lng:-105.7172,type:"stop"},
+           {t:"12:00 PM",n:"Bear Lake",d:"Crystal-clear alpine lake. Easy 0.8-mile loop. Perfect final lake moment.",lat:40.3122,lng:-105.645,type:"overnight"}]},
+
+  { num:18, title:"Rocky Mountain NP ➔ Ames, Iowa", badge:"highlight", bl:"Drive Home!", drive:"~8 hrs · I-76 ➔ I-80 east", color:"#c4551a",
+    note:"Drive through Nebraska's Sandhills — surprisingly beautiful rolling grasslands for a fitting close to the trip. 🎉",
+    stops:[{t:"6:30 AM",n:"RMNP — Sunrise Hike",d:"Last early morning hike. Elk most active at dawn.",lat:40.3428,lng:-105.6836,type:"stop"},
+           {t:"7:00 PM",n:"Ames, Iowa — Home! 🎉",d:"I-76 then I-80 east through Nebraska Sandhills.",lat:42.0308,lng:-93.6319,type:"home"}]}
+];
+
+// ── BUILD SIDEBAR ──────────────────────────────────────────────
+var sblist = document.getElementById('sblist');
+for (var i = 0; i < DAYS.length; i++) {
+  (function(day, idx) {
+    var el = document.createElement('div');
+    el.className = 'ditem' + (idx === 0 ? ' on' : '');
+    el.setAttribute('data-idx', idx);
+
+    var stopsHtml = '';
+    for (var j = 0; j < day.stops.length; j++) {
+      var s = day.stops[j];
+      stopsHtml += '<div class="dstop">'
+        + '<div class="dot"></div>'
+        + '<div>'
+          + '<div><span class="stime">' + s.t + ' &mdash; </span><span class="sname">' + s.n + '</span></div>'
+          + (s.d ? '<div class="snote">' + s.d + '</div>' : '')
+        + '</div>'
+        + '</div>';
+    }
+
+    el.innerHTML =
+      '<div class="dtop">'
+        + '<div class="dnum">' + (idx < 9 ? '0' : '') + day.num + '</div>'
+        + '<div class="dright">'
+          + '<div class="dtitle">' + day.title + '</div>'
+          + '<div class="dmeta">'
+            + '<span class="badge b-' + day.badge + '">' + day.bl + '</span>'
+            + '<span class="dhr">' + day.drive + '</span>'
+          + '</div>'
+        + '</div>'
+      + '</div>'
+      + '<div class="dstops">' + stopsHtml + '</div>'
+      + (day.note ? '<div class="dnote">' + day.note + '</div>' : '');
+
+    el.addEventListener('click', function() { selectDay(idx); });
+    sblist.appendChild(el);
+  })(DAYS[i], i);
+}
+
+// ── INIT MAP ──────────────────────────────────────────────────
+// Wait for DOM to be fully painted before init
+
+  var map = L.map('map', { zoomControl:true, attributionControl:true });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution:'&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>',
+    maxZoom:18
+  }).addTo(map);
+
+  map.setView([43, -108], 4);
+
+  var poly = null;
+  var marks = [];
+
+  function makeIcon(type, label, col) {
+    var bg = col || '#3a6b8a';
+    if (type === 'fuel')  bg = '#d4920a';
+    if (type === 'home')  bg = '#2d5a3d';
+    return L.divIcon({
+      className:'',
+      html:'<div class="cm" style="background:' + bg + '">' + label + '</div>',
+      iconSize:[26,26], iconAnchor:[13,13], popupAnchor:[0,-16]
+    });
+  }
+
+  function clearLayer() {
+    for (var i = 0; i < marks.length; i++) map.removeLayer(marks[i]);
+    marks = [];
+    if (poly) { map.removeLayer(poly); poly = null; }
+  }
+
+  function selectDay(idx) {
+    // sidebar highlight
+    var items = document.querySelectorAll('.ditem');
+    for (var i = 0; i < items.length; i++) items[i].classList.remove('on');
+    items[idx].classList.add('on');
+    items[idx].scrollIntoView({ behavior:'smooth', block:'nearest' });
+
+    clearLayer();
+    var day = DAYS[idx];
+    var coords = [];
+    for (var j = 0; j < day.stops.length; j++) {
+      coords.push([day.stops[j].lat, day.stops[j].lng]);
+    }
+
+    if (coords.length > 1) {
+      poly = L.polyline(coords, { color:day.color, weight:3.5, opacity:.85, dashArray:'8 5' }).addTo(map);
+    }
+
+    for (var k = 0; k < day.stops.length; k++) {
+      var s = day.stops[k];
+      var m = L.marker([s.lat, s.lng], { icon: makeIcon(s.type, k+1, day.color) })
+        .addTo(map)
+        .bindPopup(
+          '<strong style="font-family:sans-serif;font-size:13px">' + s.n + '</strong>' +
+          (s.d ? '<br><span style="font-size:11px;color:#666">' + s.d + '</span>' : ''),
+          { maxWidth:220 }
+        );
+      marks.push(m);
+    }
+
+    var bounds = L.latLngBounds(coords);
+    map.fitBounds(bounds, { padding:[65,65], maxZoom:11 });
+
+    document.getElementById('mo-day').textContent   = 'Day ' + day.num;
+    document.getElementById('mo-title').textContent = day.title;
+    document.getElementById('mo-drive').textContent = '⏱ ' + day.drive;
+  }
+
+
+  // overview: faint full-route line + one dot per overnight
+  var allCoords = [];
+  for (var d = 0; d < DAYS.length; d++) {
+    for (var s = 0; s < DAYS[d].stops.length; s++) {
+      allCoords.push([DAYS[d].stops[s].lat, DAYS[d].stops[s].lng]);
+    }
+  }
+  poly = L.polyline(allCoords, { color:'#c4551a', weight:1.5, opacity:.35, dashArray:'5 5' }).addTo(map);
+
+  for (var d2 = 0; d2 < DAYS.length; d2++) {
+    var ov = DAYS[d2].stops[DAYS[d2].stops.length - 1];
+    var m2 = L.marker([ov.lat, ov.lng], { icon: makeIcon('overnight', DAYS[d2].num, DAYS[d2].color) })
+      .addTo(map)
+      .bindPopup('<strong>Day ' + DAYS[d2].num + '</strong><br>' + DAYS[d2].title, { maxWidth:200 });
+    marks.push(m2);
+  }
+  map.fitBounds(L.latLngBounds(allCoords), { padding:[40,40] });
+
+  // auto-select Day 1 after a moment so map has fully rendered
+  setTimeout(function() { selectDay(0); }, 500);
+
+
+</script>
+
+<!-- Leaflet JS: 3 CDN fallbacks loaded at bottom so DOM is ready -->
+</html>
